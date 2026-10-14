@@ -101,13 +101,30 @@ export class ApiService {
 
   // --- Orders ---
   async getOrders(): Promise<Order[]> {
+    const normalizeOrder = (order: Partial<Order>): Order => ({
+      ...order,
+      id: order.id || `ord-${Date.now()}`,
+      orderNumber: order.orderNumber || 1,
+      type: order.type || 'takeaway',
+      items: order.items || [],
+      subtotal: Number(order.subtotal ?? 0),
+      tax: Number(order.tax ?? 0),
+      total: Number(order.total ?? 0),
+      paymentMethod: order.paymentMethod || 'cash',
+      paymentStatus: order.paymentStatus || 'pending',
+      status: order.status || 'incoming',
+      createdAt: order.createdAt || new Date().toISOString(),
+      updatedAt: order.updatedAt || new Date().toISOString(),
+    } as Order);
+
     try {
       const res = await fetch('/api/orders');
       if (res.ok) {
         const json = await res.json();
         if (json.orders) {
-          localStorage.setItem(LOCAL_STORAGE_ORDERS_KEY, JSON.stringify(json.orders));
-          return json.orders;
+          const normalizedOrders = json.orders.map(normalizeOrder);
+          localStorage.setItem(LOCAL_STORAGE_ORDERS_KEY, JSON.stringify(normalizedOrders));
+          return normalizedOrders;
         }
       }
     } catch {
@@ -117,12 +134,13 @@ export class ApiService {
     const cached = localStorage.getItem(LOCAL_STORAGE_ORDERS_KEY);
     if (cached) {
       try {
-        return JSON.parse(cached);
+        const parsed = JSON.parse(cached);
+        return Array.isArray(parsed) ? parsed.map(normalizeOrder) : INITIAL_ORDERS;
       } catch {
         // ignore
       }
     }
-    return INITIAL_ORDERS;
+    return INITIAL_ORDERS.map((order) => ({ ...order, status: order.status || 'incoming' }));
   }
 
   async createOrder(order: Partial<Order>): Promise<Order> {
@@ -229,6 +247,56 @@ export class ApiService {
       this.emit('order_updated', updatedOrder);
     }
     return updatedOrder;
+  }
+
+  async paySelectedOrderItems(orderId: string, itemIds: string[]): Promise<Order | null> {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/items/pay`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIds }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json.order;
+      }
+    } catch {
+      // Fallback local handling
+    }
+
+    const current = await this.getOrders();
+    let updatedOrder: Order | null = null;
+    const updated = current.map((o) => {
+      if (o.id !== orderId) return o;
+
+      const paidItemIds = new Set(itemIds);
+      const items = o.items.map((item) => (paidItemIds.has(item.id) ? { ...item, paid: true } : item));
+      const unpaidItems = items.filter((item) => !item.paid);
+      const subtotal = unpaidItems.reduce((sum, item) => sum + item.totalPrice, 0);
+      const updatedOrderData: Order = {
+        ...o,
+        items,
+        subtotal,
+        total: subtotal + subtotal * 0.0,
+        paymentStatus: unpaidItems.length === 0 ? 'paid' : 'pending',
+        updatedAt: new Date().toISOString(),
+      };
+      updatedOrderData.tax = 0;
+      updatedOrderData.total = subtotal;
+      return updatedOrderData;
+    });
+
+    localStorage.setItem(LOCAL_STORAGE_ORDERS_KEY, JSON.stringify(updated));
+    if (updatedOrder) {
+      this.emit('order_updated', updatedOrder);
+      return updatedOrder;
+    }
+
+    const fallbackOrder = updated.find((o) => o.id === orderId) || null;
+    if (fallbackOrder) {
+      this.emit('order_updated', fallbackOrder);
+    }
+    return fallbackOrder;
   }
 
   // --- Menu ---

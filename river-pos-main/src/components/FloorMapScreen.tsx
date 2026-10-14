@@ -11,6 +11,7 @@ interface FloorMapScreenProps {
   onSelectTableForOrder: (tableId: string) => void;
   onClearTable: (tableId: string) => void;
   onUpdateTableStatus: (tableId: string, status: 'free' | 'occupied' | 'bill_requested') => void;
+  onPaySelectedItems: (tableId: string, itemIdsByOrder: Record<string, string[]>) => void;
 }
 
 export const FloorMapScreen: React.FC<FloorMapScreenProps> = ({
@@ -21,9 +22,11 @@ export const FloorMapScreen: React.FC<FloorMapScreenProps> = ({
   onSelectTableForOrder,
   onClearTable,
   onUpdateTableStatus,
+  onPaySelectedItems,
 }) => {
   const [selectedArea, setSelectedArea] = useState<'all' | 'indoor' | 'patio' | 'bar'>('all');
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<Record<string, string[]>>({});
 
   const activeTable = tables.find((t) => t.id === activeTableId) || null;
 
@@ -33,7 +36,7 @@ export const FloorMapScreen: React.FC<FloorMapScreenProps> = ({
 
   const getTableOrders = (tableId: string) => {
     return orders.filter(
-      (o) => o.tableId === tableId && o.status !== 'cancelled'
+      (o) => o.tableId === tableId && o.status !== 'cancelled' && o.status !== 'delivered'
     );
   };
 
@@ -55,6 +58,37 @@ export const FloorMapScreen: React.FC<FloorMapScreenProps> = ({
         return <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-neutral-100 text-neutral-600">{status}</span>;
     }
   };
+
+  const toggleSelectedItem = (orderId: string, itemId: string) => {
+    setSelectedItemIds((prev) => {
+      const current = prev[orderId] ?? [];
+      const next = current.includes(itemId)
+        ? current.filter((id) => id !== itemId)
+        : [...current, itemId];
+
+      return {
+        ...prev,
+        [orderId]: next,
+      };
+    });
+  };
+
+  const tableOrdersForSelectedTable = (tableId: string) => {
+    return orders.filter((o) => o.tableId === tableId && o.status !== 'cancelled' && o.status !== 'delivered');
+  };
+
+  const selectedTableItems = activeTable
+    ? tableOrdersForSelectedTable(activeTable.id).flatMap((order) =>
+        (selectedItemIds[order.id] ?? [])
+          .map((itemId) => {
+            const item = order.items.find((it) => it.id === itemId && !it.paid);
+            return item ? { orderId: order.id, item } : null;
+          })
+          .filter(Boolean) as Array<{ orderId: string; item: Order['items'][number] }>
+      )
+    : [];
+
+  const selectedTableTotal = selectedTableItems.reduce((sum, entry) => sum + entry.item.totalPrice, 0);
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-100">
@@ -322,28 +356,50 @@ export const FloorMapScreen: React.FC<FloorMapScreenProps> = ({
 
                           {/* Items Breakdown */}
                           <div className="divide-y divide-neutral-200/60 text-xs">
-                            {order.items.map((it) => (
-                              <div key={it.id} className="py-1.5 flex justify-between items-start gap-2">
-                                <div>
-                                  <div className="font-semibold text-neutral-900">
-                                    {it.quantity}x {it.name}
-                                  </div>
-                                  {(it.modifiers.sugar || it.modifiers.milk || it.modifiers.notes) && (
-                                    <div className="text-[11px] text-neutral-500">
-                                      {[
-                                        it.modifiers.size,
-                                        it.modifiers.sugar && `Sugar: ${it.modifiers.sugar}`,
-                                        it.modifiers.milk && it.modifiers.milk !== 'none' && `Milk: ${it.modifiers.milk}`,
-                                        it.modifiers.notes,
-                                      ].filter(Boolean).join(' · ')}
+                            {order.items.map((it) => {
+                              const isSelected = (selectedItemIds[order.id] ?? []).includes(it.id);
+
+                              const isPaid = Boolean(it.paid);
+
+                              return (
+                                <div
+                                  key={it.id}
+                                  className={`py-1.5 flex justify-between items-start gap-2 rounded ${
+                                    isSelected ? 'bg-neutral-900 text-white px-2 -mx-2' : isPaid ? 'opacity-60' : ''
+                                  }`}
+                                >
+                                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      disabled={isPaid}
+                                      onChange={() => toggleSelectedItem(order.id, it.id)}
+                                      className="mt-1 h-3.5 w-3.5 accent-neutral-900 disabled:cursor-not-allowed"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <div className="min-w-0">
+                                      <div className={`font-semibold ${isSelected ? 'text-white' : isPaid ? 'text-neutral-500 line-through' : 'text-neutral-900'}`}>
+                                        {it.quantity}x {it.name}
+                                        {isPaid && <span className="ml-2 text-[10px] uppercase tracking-wide font-bold text-emerald-600">Paid</span>}
+                                      </div>
+                                      {(it.modifiers.sugar || it.modifiers.milk || it.modifiers.notes) && (
+                                        <div className={`text-[11px] ${isSelected ? 'text-neutral-200' : isPaid ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                                          {[
+                                            it.modifiers.size,
+                                            it.modifiers.sugar && `Sugar: ${it.modifiers.sugar}`,
+                                            it.modifiers.milk && it.modifiers.milk !== 'none' && `Milk: ${it.modifiers.milk}`,
+                                            it.modifiers.notes,
+                                          ].filter(Boolean).join(' · ')}
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
+                                  </div>
+                                  <div className={`font-mono font-bold tabular-nums shrink-0 ${isSelected ? 'text-white' : isPaid ? 'text-neutral-500 line-through' : 'text-neutral-800'}`}>
+                                    {it.totalPrice.toFixed(2)} {currency}
+                                  </div>
                                 </div>
-                                <div className="font-mono font-bold tabular-nums text-neutral-800 shrink-0">
-                                  {it.totalPrice.toFixed(2)} {currency}
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
 
                           <div className="pt-2 border-t border-neutral-200 flex justify-between items-center text-xs">
@@ -377,6 +433,15 @@ export const FloorMapScreen: React.FC<FloorMapScreenProps> = ({
 
             {/* Bottom Actions */}
             <div className="p-4 border-t border-neutral-200 bg-white space-y-2 shrink-0">
+              {selectedTableItems.length > 0 && (
+                <div className="rounded border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] text-neutral-700 flex items-center justify-between gap-2">
+                  <span>{selectedTableItems.length} item(s) selected</span>
+                  <span className="font-mono font-bold text-neutral-900 tabular-nums">
+                    {selectedTableTotal.toFixed(2)} {currency}
+                  </span>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
@@ -394,23 +459,43 @@ export const FloorMapScreen: React.FC<FloorMapScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    if (selectedTableItems.length > 0) {
+                      onPaySelectedItems(
+                        activeTable.id,
+                        Object.fromEntries(
+                          Object.entries(selectedItemIds).filter(([, ids]) => ids.length > 0)
+                        )
+                      );
+                      setSelectedItemIds({});
+                      return;
+                    }
+
                     const nextStatus = activeTable.status === 'bill_requested' ? 'occupied' : 'bill_requested';
                     onUpdateTableStatus(activeTable.id, nextStatus);
                   }}
                   className={`py-2 rounded-lg font-bold text-xs border flex items-center justify-center gap-1.5 transition-colors ${
-                    activeTable.status === 'bill_requested'
+                    selectedTableItems.length > 0
+                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                      : activeTable.status === 'bill_requested'
                       ? 'bg-amber-100 border-amber-400 text-amber-900'
                       : 'border-neutral-300 text-neutral-700 hover:bg-neutral-50'
                   }`}
                 >
                   <Receipt size={14} />
-                  <span>{activeTable.status === 'bill_requested' ? 'Bill Marked' : 'Request Bill'}</span>
+                  <span>
+                    {selectedTableItems.length > 0
+                      ? `Pay Selected (${selectedTableTotal.toFixed(2)} ${currency})`
+                      : activeTable.status === 'bill_requested'
+                      ? 'Bill Marked'
+                      : 'Pay Selected'}
+                  </span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => {
                     onClearTable(activeTable.id);
+                    setSelectedItemIds({});
                     setActiveTableId(null);
                   }}
                   className="py-2 rounded-lg font-bold text-xs border border-neutral-300 text-neutral-700 hover:bg-neutral-100 flex items-center justify-center gap-1.5 transition-colors"

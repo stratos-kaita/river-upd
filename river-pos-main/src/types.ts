@@ -43,6 +43,7 @@ export interface OrderItem {
   quantity: number;
   modifiers: ModifierSelection;
   totalPrice: number;
+  paid?: boolean;
 }
 
 export type OrderStatus = 'incoming' | 'brewing' | 'ready' | 'delivered' | 'cancelled';

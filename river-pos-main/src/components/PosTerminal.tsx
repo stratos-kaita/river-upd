@@ -13,6 +13,7 @@ interface PosTerminalProps {
   shopName: string;
   taxRate: number;
   isMonochrome: boolean;
+  canRemoveItems?: boolean;
   onSendOrder: (orderData: {
     type: OrderType;
     tableId?: string;
@@ -44,6 +45,7 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
   shopName,
   taxRate,
   isMonochrome,
+  canRemoveItems = false,
   onSendOrder,
   onCartCountChange,
   isMobileCartOpen,
@@ -487,6 +489,7 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
           tables={tables}
           currency={currency}
           isMonochrome={isMonochrome}
+          canRemoveItems={canRemoveItems}
           onSetOrderType={setOrderType}
           onSelectTable={handleSelectTable}
           onUpdateQuantity={handleUpdateQuantity}
@@ -508,6 +511,7 @@ export const PosTerminal: React.FC<PosTerminalProps> = ({
               tables={tables}
               currency={currency}
               isMonochrome={isMonochrome}
+              canRemoveItems={canRemoveItems}
               onSetOrderType={setOrderType}
               onSelectTable={handleSelectTable}
               onUpdateQuantity={handleUpdateQuantity}

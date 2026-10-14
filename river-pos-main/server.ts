@@ -149,7 +149,20 @@ app.get('/api/events', (req: Request, res: Response) => {
 
 // Orders API
 app.get('/api/orders', (_req: Request, res: Response) => {
-  res.json({ success: true, orders });
+  const normalizedOrders = orders.map((order) => ({
+    ...order,
+    type: order.type || 'takeaway',
+    items: order.items || [],
+    subtotal: Number(order.subtotal ?? 0),
+    tax: Number(order.tax ?? 0),
+    total: Number(order.total ?? 0),
+    paymentMethod: order.paymentMethod || 'cash',
+    paymentStatus: order.paymentStatus || 'pending',
+    status: order.status || 'incoming',
+  }));
+
+  orders = normalizedOrders;
+  res.json({ success: true, orders: normalizedOrders });
 });
 
 app.post('/api/orders', (req: Request, res: Response) => {
@@ -166,8 +179,22 @@ app.post('/api/orders', (req: Request, res: Response) => {
     ...newOrder,
     id: `ord-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     orderNumber,
+    type: newOrder.type || 'takeaway',
+    items: newOrder.items || [],
+    subtotal: Number(newOrder.subtotal ?? 0),
+    tax: Number(newOrder.tax ?? 0),
+    total: Number(newOrder.total ?? 0),
+    paymentMethod: newOrder.paymentMethod || 'cash',
+    paymentStatus: newOrder.paymentStatus || 'pending',
+    status: newOrder.status || 'incoming',
     createdAt: newOrder.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    notes: newOrder.notes,
+    customerName: newOrder.customerName,
+    tableId: newOrder.tableId,
+    tableName: newOrder.tableName,
+    tenderedCash: newOrder.tenderedCash,
+    changeDue: newOrder.changeDue,
   };
 
   orders.unshift(orderToSave);
@@ -228,6 +255,51 @@ app.patch('/api/orders/:id', (req: Request, res: Response) => {
 
   persist();
   broadcastEvent('order_updated', updatedOrder);
+  res.json({ success: true, order: updatedOrder, tables });
+});
+
+app.patch('/api/orders/:id/items/pay', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const itemIds: string[] = Array.isArray(req.body?.itemIds) ? req.body.itemIds : [];
+
+  const orderIndex = orders.findIndex((o) => o.id === id);
+  if (orderIndex === -1) {
+    res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+
+  const order = orders[orderIndex];
+  const updatedItems = order.items.map((item) =>
+    itemIds.includes(item.id) ? { ...item, paid: true } : item
+  );
+
+  const remainingItems = updatedItems.filter((item) => !item.paid);
+  const subtotal = remainingItems.reduce((sum, item) => sum + item.totalPrice, 0);
+  const updatedOrder: Order = {
+    ...order,
+    items: updatedItems,
+    subtotal,
+    tax: 0,
+    total: subtotal,
+    paymentStatus: remainingItems.length === 0 ? 'paid' : 'pending',
+    updatedAt: new Date().toISOString(),
+  };
+
+  orders[orderIndex] = updatedOrder;
+
+  tables = tables.map((table) => {
+    if (table.id !== order.tableId) return table;
+
+    const remainingTotal = orders
+      .filter((entry) => entry.tableId === table.id && entry.status !== 'cancelled')
+      .reduce((sum, entry) => sum + entry.total, 0);
+
+    return { ...table, currentTotal: remainingTotal || undefined, status: remainingTotal > 0 ? 'occupied' : 'free' };
+  });
+
+  persist();
+  broadcastEvent('order_updated', updatedOrder);
+  broadcastEvent('tables_updated', tables);
   res.json({ success: true, order: updatedOrder, tables });
 });
 
@@ -294,6 +366,12 @@ app.patch('/api/tables/:id', (req: Request, res: Response) => {
         updated.activeOrderId = undefined;
         updated.currentTotal = undefined;
         updated.seatedAt = undefined;
+
+        orders = orders.map((order) =>
+          order.tableId === id && order.status !== 'cancelled' && order.status !== 'delivered'
+            ? { ...order, status: 'delivered', updatedAt: new Date().toISOString() }
+            : order
+        );
       }
       updatedTable = updated;
       return updated;
@@ -306,6 +384,10 @@ app.patch('/api/tables/:id', (req: Request, res: Response) => {
   }
   persist();
   broadcastEvent('tables_updated', tables);
+  if (updates.status === 'free') {
+    const tableOrders = orders.filter((order) => order.tableId === id && order.status === 'delivered');
+    tableOrders.forEach((order) => broadcastEvent('order_updated', order));
+  }
   res.json({ success: true, table: updatedTable, tables });
 });
 

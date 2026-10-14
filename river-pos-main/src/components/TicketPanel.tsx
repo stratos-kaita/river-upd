@@ -9,6 +9,7 @@ interface TicketPanelProps {
   tables: Table[];
   currency: string;
   isMonochrome: boolean;
+  canRemoveItems?: boolean;
   onSetOrderType: (type: OrderType) => void;
   onSelectTable: (tableId: string) => void;
   onUpdateQuantity: (itemId: string, delta: number) => void;
@@ -25,6 +26,7 @@ export const TicketPanel: React.FC<TicketPanelProps> = ({
   tables,
   currency,
   isMonochrome,
+  canRemoveItems = false,
   onSetOrderType,
   onSelectTable,
   onUpdateQuantity,
@@ -184,15 +186,17 @@ export const TicketPanel: React.FC<TicketPanelProps> = ({
                   </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => onRemoveItem(item.id)}
-                  className="text-neutral-400 hover:text-red-600 p-1 transition-colors"
-                  title="Remove item"
-                  aria-label="Remove item"
-                >
-                  <Trash2 size={14} />
-                </button>
+                {canRemoveItems && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveItem(item.id)}
+                    className="text-neutral-400 hover:text-red-600 p-1 transition-colors"
+                    title="Remove item"
+                    aria-label="Remove item"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
             </div>
           ))

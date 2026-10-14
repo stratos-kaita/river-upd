@@ -154,6 +154,8 @@ export default function App() {
   }) => {
     const created = await api.createOrder({
       ...orderData,
+      status: 'incoming',
+      paymentStatus: orderData.paymentStatus || 'pending',
       notes: orderData.customerName ? `Ordered by ${currentAccount.name} (${orderData.customerName})` : `Staff: ${currentAccount.name}`,
     });
     if (created) {
@@ -187,6 +189,43 @@ export default function App() {
     await api.updateOrderStatus(orderId, status);
   };
 
+  const handlePaySelectedItems = async (tableId: string, itemIdsByOrder: Record<string, string[]>) => {
+    const entries = Object.entries(itemIdsByOrder).filter(([, ids]) => ids.length > 0);
+    if (entries.length === 0) return;
+
+    const updatedOrders = await Promise.all(
+      entries.map(async ([orderId, ids]) => api.paySelectedOrderItems(orderId, ids))
+    );
+
+    const paidOrders = updatedOrders.filter(Boolean) as Order[];
+    if (paidOrders.length === 0) return;
+
+    setOrders((prev) => {
+      const nextOrders = prev.map((order) => {
+        const updated = paidOrders.find((nextOrder) => nextOrder.id === order.id);
+        return updated ? updated : order;
+      });
+
+      const remainingTableTotal = nextOrders
+        .filter((order) => order.tableId === tableId && order.status !== 'cancelled')
+        .reduce((sum, order) => sum + order.total, 0);
+
+      setTables((tablePrev) =>
+        tablePrev.map((table) =>
+          table.id === tableId
+            ? {
+                ...table,
+                currentTotal: remainingTableTotal || undefined,
+                status: remainingTableTotal > 0 ? 'occupied' : 'free',
+              }
+            : table
+        )
+      );
+
+      return nextOrders;
+    });
+  };
+
   // Table Operations
   const handleSelectTableForOrder = (tableId: string) => {
     setSelectedTableForOrder(tableId);
@@ -194,6 +233,18 @@ export default function App() {
   };
 
   const handleClearTable = async (tableId: string) => {
+    const activeTableOrders = orders.filter(
+      (order) => order.tableId === tableId && order.status !== 'cancelled' && order.status !== 'delivered'
+    );
+
+    setOrders((prev) =>
+      prev.map((order) =>
+        order.tableId === tableId && order.status !== 'cancelled' && order.status !== 'delivered'
+          ? { ...order, status: 'delivered', updatedAt: new Date().toISOString() }
+          : order
+      )
+    );
+
     setTables((prev) =>
       prev.map((t) =>
         t.id === tableId
@@ -201,12 +252,21 @@ export default function App() {
           : t
       )
     );
+
+    if (activeTableOrders.length > 0) {
+      await Promise.all(
+        activeTableOrders.map((order) => api.updateOrderStatus(order.id, 'delivered'))
+      );
+    }
+
     await api.updateTable(tableId, {
       status: 'free',
       activeOrderId: undefined,
       currentTotal: undefined,
       seatedAt: undefined,
     });
+
+    setSelectedTableForOrder('');
   };
 
   const handleUpdateTableStatus = async (
@@ -333,6 +393,7 @@ export default function App() {
             shopName={settings.shopName}
             taxRate={settings.taxRate}
             isMonochrome={isMonochrome}
+            canRemoveItems={currentAccount.role === 'boss'}
             onSendOrder={handleSendOrder}
             onCartCountChange={setCartCount}
             isMobileCartOpen={isMobileCartOpen}
@@ -355,6 +416,7 @@ export default function App() {
             onSelectTableForOrder={handleSelectTableForOrder}
             onClearTable={handleClearTable}
             onUpdateTableStatus={handleUpdateTableStatus}
+            onPaySelectedItems={handlePaySelectedItems}
           />
         )}
 

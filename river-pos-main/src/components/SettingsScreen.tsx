@@ -1,7 +1,19 @@
 import React, { useState } from 'react';
 import { ShopSettings, MenuItem } from '../types';
-import { Save, Plus, Edit2, Check, Store, Coffee, Volume2, Sparkles, Sliders } from 'lucide-react';
+import { Save, Plus, Edit2, Check, Store, Coffee, Volume2, Sparkles, Sliders, ShieldCheck } from 'lucide-react';
 import { sounds } from '../utils/sound';
+
+const LICENSE_CODES = [
+  { code: 'RIVER-2026-A', label: 'Phase 1' },
+  { code: 'RIVER-2026-B', label: 'Phase 2' },
+  { code: 'RIVER-2026-C', label: 'Phase 3' },
+] as const;
+
+const getCurrentLicense = () => {
+  const month = new Date().getMonth();
+  const phaseIndex = Math.floor(month / 4) % LICENSE_CODES.length;
+  return LICENSE_CODES[phaseIndex];
+};
 
 interface SettingsScreenProps {
   settings: ShopSettings;
@@ -38,6 +50,42 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [editPriceVal, setEditPriceVal] = useState<string>('');
 
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [licenseInput, setLicenseInput] = useState('');
+  const [licenseError, setLicenseError] = useState('');
+  const [licenseStatus, setLicenseStatus] = useState<'active' | 'inactive'>('inactive');
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('river_pos_license_code');
+      if (saved) {
+        setLicenseStatus(saved.trim().toUpperCase() === getCurrentLicense().code.toUpperCase() ? 'active' : 'inactive');
+      }
+    }
+  }, []);
+
+  const currentLicense = getCurrentLicense();
+
+  const handleLicenseSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const normalized = licenseInput.trim().toUpperCase();
+
+    if (!normalized) {
+      setLicenseError('Enter the current license code.');
+      return;
+    }
+
+    if (normalized === currentLicense.code.toUpperCase()) {
+      setLicenseStatus('active');
+      setLicenseError('');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('river_pos_license_code', normalized);
+      }
+      return;
+    }
+
+    setLicenseStatus('inactive');
+    setLicenseError(`Invalid code. Use the current active code: ${currentLicense.code}`);
+  };
 
   const handleSaveShopSettings = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,6 +154,52 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-12">
+          <div className="bg-white p-5 rounded border border-neutral-200">
+            <div className="flex items-center justify-between gap-3 pb-3 border-b border-neutral-200">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={18} className="text-neutral-700" />
+                <h2 className="text-sm font-bold uppercase tracking-wide text-neutral-900">
+                  License Control
+                </h2>
+              </div>
+              <span
+                className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                  licenseStatus === 'active'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                {licenseStatus === 'active' ? 'Active' : 'Needs Activation'}
+              </span>
+            </div>
+
+            <div className="mt-4">
+              <form onSubmit={handleLicenseSubmit} className="space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={licenseInput}
+                    onChange={(e) => {
+                      setLicenseInput(e.target.value);
+                      if (licenseError) setLicenseError('');
+                    }}
+                    placeholder="Enter current code"
+                    className="flex-1 text-xs p-2.5 border border-neutral-300 rounded focus:border-neutral-900 focus:outline-none font-mono"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2.5 rounded bg-neutral-900 text-white text-xs font-bold hover:bg-neutral-800"
+                  >
+                    Save
+                  </button>
+                </div>
+                {licenseError && <p className="text-[11px] font-medium text-red-600">{licenseError}</p>}
+              </form>
+            </div>
+          </div>
+        </div>
+
         {/* Left Column: General Shop Settings */}
         <div className="lg:col-span-5 space-y-6">
           <form

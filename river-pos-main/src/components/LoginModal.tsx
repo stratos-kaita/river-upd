@@ -229,7 +229,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           </div>
 
           {/* Fast Switch / Bypass Button */}
-          <div className="pt-2 border-t border-neutral-200">
+          {/*<div className="pt-2 border-t border-neutral-200">
             <button
               type="button"
               onClick={() => handleQuickLogin(selectedRole)}
@@ -238,7 +238,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               <span>Instant Switch to {selectedRole === 'waiter' ? 'Waiter' : 'Boss'}</span>
               <ArrowRight size={14} />
             </button>
-          </div>
+          </div>*/}
         </div>
       </div>
     </div>
