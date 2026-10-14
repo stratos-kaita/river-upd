@@ -22,7 +22,19 @@ import { INITIAL_MENU_ITEMS, INITIAL_TABLES, INITIAL_ORDERS, DEFAULT_SETTINGS } 
 import { sounds } from './utils/sound';
 
 export default function App() {
-  const [currentAccount, setCurrentAccount] = useState<UserAccount | null>(null);
+  const [currentAccount, setCurrentAccount] = useState<UserAccount | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('river_session_account');
+        if (saved) {
+          return JSON.parse(saved);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return null;
+  });
   const [currentScreen, setCurrentScreen] = useState<ActiveScreen>('tables');
   const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(INITIAL_MENU_ITEMS);
@@ -31,7 +43,16 @@ export default function App() {
   const [isMobileCartOpen, setIsMobileCartOpen] = useState<boolean>(false);
   const [cartCount, setCartCount] = useState<number>(0);
   const [selectedTableForOrder, setSelectedTableForOrder] = useState<string>('');
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(true);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return !sessionStorage.getItem('river_session_account');
+      } catch {
+        // ignore
+      }
+    }
+    return true;
+  });
   const [targetScreenAfterLogin, setTargetScreenAfterLogin] = useState<ActiveScreen | null>(null);
 
   // Initialize data and subscribe to real-time events
@@ -101,9 +122,9 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
-    // If attempting to access Boss-only screens as Waiter, request Boss PIN authorization
+    // Only settings & history require Boss authorization
     if (
-      (screen === 'kds' || screen === 'settings' || screen === 'history') &&
+      (screen === 'settings' || screen === 'history') &&
       currentAccount.role !== 'boss'
     ) {
       setTargetScreenAfterLogin(screen);
@@ -115,13 +136,20 @@ export default function App() {
 
   const handleLogin = (account: UserAccount) => {
     setCurrentAccount(account);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('river_session_account', JSON.stringify(account));
+      } catch {
+        // ignore
+      }
+    }
     setIsLoginModalOpen(false);
     if (account.role === 'boss' && targetScreenAfterLogin) {
       setCurrentScreen(targetScreenAfterLogin);
       setTargetScreenAfterLogin(null);
     } else if (
       account.role === 'waiter' &&
-      (currentScreen === 'kds' || currentScreen === 'settings' || currentScreen === 'history')
+      (currentScreen === 'settings' || currentScreen === 'history')
     ) {
       setCurrentScreen('tables');
     }
@@ -129,6 +157,13 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentAccount(null);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.removeItem('river_session_account');
+      } catch {
+        // ignore
+      }
+    }
     setTargetScreenAfterLogin(null);
     setIsLoginModalOpen(true);
     setCurrentScreen('tables');
@@ -420,8 +455,8 @@ export default function App() {
           />
         )}
 
-        {/* Protected Boss Screens */}
-        {currentScreen === 'kds' && currentAccount?.role === 'boss' && (
+        {/* Server / Kitchen Display Screen */}
+        {currentScreen === 'kds' && currentAccount && (
           <ServerKitchenScreen
             orders={orders}
             currency={settings.currency}

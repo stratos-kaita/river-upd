@@ -72,42 +72,31 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </button>
 
-        {/* Server / KDS (Boss or Waiter PIN prompt) */}
-        {isBoss ? (
-          <button
-            onClick={() => onNavigate('kds')}
-            className={`py-1.5 px-2 md:px-3 rounded transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
-              currentScreen === 'kds'
-                ? 'bg-neutral-900 text-white font-semibold'
-                : 'text-neutral-600 hover:text-neutral-900'
-            }`}
-          >
-            <span>Server / Bar</span>
-            {openOrdersCount > 0 && (
-              <span
-                className={`text-[11px] font-bold px-1.5 py-0.2 rounded tabular-nums ${
-                  currentScreen === 'kds'
-                    ? 'bg-white text-neutral-900'
-                    : 'bg-neutral-900 text-white'
-                }`}
-              >
-                {openOrdersCount}
-              </span>
-            )}
-          </button>
-        ) : (
-          <button
-            onClick={() => onNavigate('kds')}
-            title="Boss PIN Required"
-            className="inline-flex items-center gap-1 py-1.5 px-2 md:px-2.5 rounded text-neutral-400 hover:text-neutral-700 transition-colors whitespace-nowrap shrink-0 text-xs"
-          >
-            <Lock size={12} />
-            <span>Bar (Boss)</span>
-          </button>
-        )}
+        {/* Server / KDS (Available to both Waiter & Boss) */}
+        <button
+          onClick={() => onNavigate('kds')}
+          className={`py-1.5 px-2 md:px-3 rounded transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+            currentScreen === 'kds'
+              ? 'bg-neutral-900 text-white font-semibold'
+              : 'text-neutral-600 hover:text-neutral-900'
+          }`}
+        >
+          <span>Server / Bar</span>
+          {openOrdersCount > 0 && (
+            <span
+              className={`text-[11px] font-bold px-1.5 py-0.2 rounded tabular-nums ${
+                currentScreen === 'kds'
+                  ? 'bg-white text-neutral-900'
+                  : 'bg-neutral-900 text-white'
+              }`}
+            >
+              {openOrdersCount}
+            </span>
+          )}
+        </button>
 
-        {/* Catalog & Settings (Boss or Waiter PIN prompt) */}
-        {isBoss ? (
+        {/* Catalog & Settings (Boss Account) */}
+        {isBoss && (
           <button
             onClick={() => onNavigate('settings')}
             className={`py-1.5 px-2 md:px-3 rounded transition-colors whitespace-nowrap shrink-0 ${
@@ -118,18 +107,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             Catalog
           </button>
-        ) : (
-          <button
-            onClick={() => onNavigate('settings')}
-            title="Boss PIN Required"
-            className="inline-flex items-center gap-1 py-1.5 px-2 md:px-2.5 rounded text-neutral-400 hover:text-neutral-700 transition-colors whitespace-nowrap shrink-0 text-xs"
-          >
-            <Lock size={12} />
-            <span>Catalog (Boss)</span>
-          </button>
         )}
 
-        {/* Order History */}
+        {/* Order History (Boss Account) */}
         {isBoss && (
           <button
             onClick={() => onNavigate('history')}
