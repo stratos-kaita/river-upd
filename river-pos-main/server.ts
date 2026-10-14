@@ -1,11 +1,11 @@
-import express, { Request, Response } from 'express';
+import express, { type Request, type Response } from 'express';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { Order, MenuItem, Table, ShopSettings } from './src/types';
-import { INITIAL_MENU_ITEMS, INITIAL_TABLES, DEFAULT_SETTINGS } from './src/data/menuData';
+import type { Order, MenuItem, Table, ShopSettings } from './src/types.ts';
+import { INITIAL_MENU_ITEMS, INITIAL_TABLES, DEFAULT_SETTINGS } from './src/data/menuData.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,7 +18,10 @@ app.use(express.json());
 // ---------- Persistent storage (JSON file on disk) ----------
 // Everything is kept in memory for speed AND saved to disk after every change,
 // so a restart or crash does not lose orders, menu changes or settings.
-const DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, 'data');
+const DATA_DIR =
+  process.env.DATA_DIR && fs.existsSync(path.join(process.env.DATA_DIR, 'db.json'))
+    ? process.env.DATA_DIR
+    : path.resolve(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 

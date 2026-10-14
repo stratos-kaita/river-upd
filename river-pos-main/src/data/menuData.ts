@@ -1,4 +1,4 @@
-import { MenuItem, Table, ShopSettings, Order } from '../types';
+import type { MenuItem, Table, ShopSettings, Order } from '../types.ts';
 
 export const INITIAL_MENU_ITEMS: MenuItem[] = [
   // Espresso & Greek Specials

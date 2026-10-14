@@ -68,17 +68,31 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   };
 
   const validatePin = (inputPin: string, roleToTest: UserRole) => {
-    const acc = DEFAULT_ACCOUNTS.find((a) => a.role === roleToTest);
-    if (acc && inputPin === acc.pin) {
+    // Check if the pin directly matches the selected role
+    const accForRole = DEFAULT_ACCOUNTS.find((a) => a.role === roleToTest);
+    if (accForRole && inputPin === accForRole.pin) {
       sounds.playReadyChime();
-      onLogin(acc);
+      onLogin(accForRole);
       setPin('');
       setErrorMessage('');
       onClose();
-    } else {
-      setErrorMessage('Incorrect PIN. Please try again.');
-      setPin('');
+      return;
     }
+
+    // Also auto-detect if the pin belongs to the other role
+    const matchingAcc = DEFAULT_ACCOUNTS.find((a) => a.pin === inputPin);
+    if (matchingAcc) {
+      sounds.playReadyChime();
+      onLogin(matchingAcc);
+      setPin('');
+      setErrorMessage('');
+      onClose();
+      return;
+    }
+
+    sounds.playTap();
+    setErrorMessage('Incorrect PIN code. Please try again.');
+    setPin('');
   };
 
   const handleQuickLogin = (role: UserRole) => {
@@ -157,17 +171,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           </div>
 
           {/* Account Explanation */}
-          <div className="text-center">
+          <div className="text-center p-2.5 rounded-lg bg-neutral-50 border border-neutral-200">
             <p className="text-xs font-semibold text-neutral-800">
               {selectedRole === 'waiter'
-                ? 'Waiter Account (Access: Take Orders + Floor Tables)'
-                : 'Boss Account (Access: Live Server / KDS + Catalog Management)'}
-            </p>
-            <p
-              style={{ display: 'none' }}
-              className="hidden text-[11px] text-neutral-500 mt-0.5 font-mono"
-            >
-              Default PIN: <strong className="text-neutral-900">{targetAccount.pin}</strong>
+                ? 'Waiter Account (Take Orders + Floor Tables)'
+                : 'Boss Account (Live KDS + Shift Analytics & Settings)'}
             </p>
           </div>
 

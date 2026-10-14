@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Order, OrderStatus } from '../types';
 import {
   Clock,
@@ -11,6 +11,9 @@ import {
   Search,
   Filter,
   CheckCheck,
+  ChevronDown,
+  ChevronRight,
+  Calendar,
 } from 'lucide-react';
 import { sounds } from '../utils/sound';
 
@@ -61,6 +64,112 @@ export const ServerKitchenScreen: React.FC<ServerKitchenScreenProps> = ({
   const brewingOrders = filteredOrders.filter((o) => o.status === 'brewing');
   const readyOrders = filteredOrders.filter((o) => o.status === 'ready');
   const deliveredOrders = filteredOrders.filter((o) => o.status === 'delivered');
+
+  const [expandedHours, setExpandedHours] = useState<Record<number, boolean>>({});
+  const [showAllDays, setShowAllDays] = useState<boolean>(false);
+
+  const isSameDay = (d1: Date, d2: Date) =>
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate();
+
+  const today = useMemo(() => new Date(now), [now]);
+
+  // Orders completed today
+  const todaysCompletedOrders = useMemo(() => {
+    return deliveredOrders.filter((o) => {
+      const d = new Date(o.updatedAt || o.createdAt);
+      return !isNaN(d.getTime()) && isSameDay(d, today);
+    });
+  }, [deliveredOrders, today]);
+
+  const todaysCompletedRevenue = useMemo(() => {
+    return todaysCompletedOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  }, [todaysCompletedOrders]);
+
+  const olderCompletedCount = deliveredOrders.length - todaysCompletedOrders.length;
+
+  // Hourly groupings for delivered orders
+  const hourlyBuckets = useMemo(() => {
+    const currentHour = today.getHours();
+
+    const targetOrders = showAllDays ? deliveredOrders : todaysCompletedOrders;
+
+    const ordersByHour = new Map<number, Order[]>();
+
+    targetOrders.forEach((order) => {
+      const d = new Date(order.updatedAt || order.createdAt);
+      if (!isNaN(d.getTime())) {
+        const h = d.getHours();
+        if (!ordersByHour.has(h)) {
+          ordersByHour.set(h, []);
+        }
+        ordersByHour.get(h)!.push(order);
+      }
+    });
+
+    // Only hours that have completed orders today plus the current hour
+    const activeHours = new Set<number>(ordersByHour.keys());
+    activeHours.add(currentHour);
+
+    const sortedHours = Array.from(activeHours).sort((a, b) => b - a);
+
+    return sortedHours.map((h) => {
+      const hOrders = ordersByHour.get(h) || [];
+      hOrders.sort((a, b) => {
+        const timeA = new Date(a.updatedAt || a.createdAt).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt).getTime();
+        return timeB - timeA;
+      });
+
+      const totalRevenue = hOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+      const totalItems = hOrders.reduce(
+        (sum, o) => sum + (o.items?.reduce((isum, it) => isum + it.quantity, 0) || 0),
+        0
+      );
+
+      const padH = (num: number) => num.toString().padStart(2, '0');
+      const label = `${padH(h)}:00 - ${padH(h)}:59`;
+
+      return {
+        hour: h,
+        label,
+        isCurrentHour: h === currentHour,
+        orders: hOrders,
+        totalRevenue,
+        totalItems,
+      };
+    });
+  }, [deliveredOrders, todaysCompletedOrders, today, showAllDays]);
+
+  const toggleHour = (hour: number) => {
+    sounds.playTap();
+    setExpandedHours((prev) => ({
+      ...prev,
+      [hour]: !prev[hour],
+    }));
+  };
+
+  const handleExpandAll = () => {
+    sounds.playTap();
+    const allExpanded: Record<number, boolean> = {};
+    hourlyBuckets.forEach((b) => {
+      allExpanded[b.hour] = true;
+    });
+    setExpandedHours(allExpanded);
+  };
+
+  const handleCollapseAll = () => {
+    sounds.playTap();
+    setExpandedHours({});
+  };
+
+  const isHourOpen = (hour: number, count: number) => {
+    if (searchQuery.trim() !== '') {
+      return count > 0;
+    }
+    return !!expandedHours[hour];
+  };
 
   // Elapsed time formatter
   const getElapsedFormatted = (createdAt: string) => {
@@ -272,15 +381,25 @@ export const ServerKitchenScreen: React.FC<ServerKitchenScreenProps> = ({
           {order.status === 'delivered' && (
             <div className="w-full flex items-center justify-between text-xs text-neutral-500">
               <span className="font-semibold text-emerald-700 flex items-center gap-1">
-                <CheckCheck size={14} /> Completed
+                <CheckCheck size={14} />
+                <span>
+                  Delivered{' '}
+                  <span className="font-mono text-[11px] text-neutral-600 font-normal">
+                    {new Date(order.updatedAt || order.createdAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </span>
               </span>
               <button
                 type="button"
                 onClick={() => onUpdateOrderStatus(order.id, 'brewing')}
                 title="Recall back to brewing"
-                className="p-1 hover:text-neutral-900 transition-colors"
+                className="p-1 hover:text-neutral-900 transition-colors flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-900"
               >
-                <RotateCcw size={14} />
+                <RotateCcw size={13} />
+                <span>Recall</span>
               </button>
             </div>
           )}
@@ -465,24 +584,128 @@ export const ServerKitchenScreen: React.FC<ServerKitchenScreenProps> = ({
           </div>
         </div>
 
-        {/* Column 4: Completed / Archived */}
+        {/* Column 4: Completed / Archived with Hourly Dropdown Breakdown */}
         <div className="flex flex-col h-full bg-neutral-50 rounded border border-neutral-200 overflow-hidden">
-          <div className="p-3 bg-neutral-300 text-neutral-800 flex items-center justify-between shrink-0">
-            <span className="font-bold text-xs uppercase tracking-wider">
-              4. Completed
-            </span>
-            <span className="font-mono text-xs font-bold tabular-nums px-2 py-0.5 bg-neutral-200 rounded">
-              {deliveredOrders.length}
-            </span>
+          <div className="p-3 bg-neutral-800 text-white flex items-center justify-between shrink-0">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-xs uppercase tracking-wider">
+                  4. Completed
+                </span>
+                <span className="font-mono text-xs font-bold tabular-nums px-2 py-0.5 bg-neutral-700 rounded text-neutral-100">
+                  {showAllDays ? deliveredOrders.length : todaysCompletedOrders.length}
+                </span>
+              </div>
+              <p className="text-[10px] text-neutral-400 mt-0.5 font-mono tabular-nums">
+                {showAllDays ? 'All time' : 'Today'}: {todaysCompletedOrders.length} orders · {currency}{todaysCompletedRevenue.toFixed(2)}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <button
+                type="button"
+                onClick={handleExpandAll}
+                className="px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-neutral-200 transition-colors text-[10px] font-semibold"
+                title="Expand all hour sections"
+              >
+                Expand All
+              </button>
+              <button
+                type="button"
+                onClick={handleCollapseAll}
+                className="px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-neutral-200 transition-colors text-[10px] font-semibold"
+                title="Collapse all hour sections"
+              >
+                Collapse
+              </button>
+            </div>
           </div>
 
-          <div className="flex-1 p-2.5 overflow-y-auto space-y-3">
-            {deliveredOrders.length === 0 ? (
+          {/* Subheader Filters: Today vs All Days if older exist */}
+          {olderCompletedCount > 0 && (
+            <div className="px-3 py-1.5 bg-neutral-100 border-b border-neutral-200 flex items-center justify-between text-[11px] text-neutral-600">
+              <span>{showAllDays ? 'Showing all days' : "Showing today's orders"}</span>
+              <button
+                type="button"
+                onClick={() => setShowAllDays((prev) => !prev)}
+                className="font-bold text-neutral-900 hover:underline"
+              >
+                {showAllDays ? "Today's only" : `Include ${olderCompletedCount} older`}
+              </button>
+            </div>
+          )}
+
+          {/* Hourly Accordion List */}
+          <div className="flex-1 p-2.5 overflow-y-auto space-y-2">
+            {hourlyBuckets.length === 0 ? (
               <div className="h-40 flex items-center justify-center text-xs text-neutral-400 text-center">
                 Completed orders will show here
               </div>
             ) : (
-              deliveredOrders.slice(0, 10).map(renderOrderCard)
+              hourlyBuckets.map((bucket) => {
+                const isOpen = isHourOpen(bucket.hour, bucket.orders.length);
+
+                return (
+                  <div
+                    key={bucket.hour}
+                    className={`rounded border transition-colors overflow-hidden ${
+                      bucket.isCurrentHour
+                        ? 'border-neutral-300 bg-white shadow-2xs'
+                        : 'border-neutral-200 bg-white shadow-2xs'
+                    }`}
+                  >
+                    {/* Hourly Drawer Toggle Header */}
+                    <button
+                      type="button"
+                      onClick={() => toggleHour(bucket.hour)}
+                      aria-expanded={isOpen}
+                      className={`w-full p-2.5 flex items-center justify-between gap-2 text-left transition-colors select-none ${
+                        isOpen ? 'bg-neutral-100 border-b border-neutral-200' : 'hover:bg-neutral-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {isOpen ? (
+                          <ChevronDown size={15} className="shrink-0 text-neutral-800" />
+                        ) : (
+                          <ChevronRight size={15} className="shrink-0 text-neutral-500" />
+                        )}
+                        <span className="font-mono text-xs font-bold text-neutral-900 tracking-tight whitespace-nowrap">
+                          {bucket.label}
+                        </span>
+                        {bucket.isCurrentHour && (
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
+                            Current
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0 text-right">
+                        <span className="font-mono text-xs font-bold tabular-nums text-neutral-900">
+                          {bucket.orders.length} {bucket.orders.length === 1 ? 'order' : 'orders'}
+                        </span>
+                        {bucket.orders.length > 0 && (
+                          <span className="text-neutral-500 font-mono text-[11px] tabular-nums">
+                            · {bucket.totalRevenue.toFixed(2)} {currency}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Hourly Orders Cards Dropdown */}
+                    {isOpen && (
+                      <div className="p-2 space-y-2 bg-neutral-50/70 border-t-0">
+                        {bucket.orders.length === 0 ? (
+                          <div className="py-3 px-2 text-center text-xs text-neutral-400 italic">
+                            No orders completed yet in this hour window ({bucket.label})
+                          </div>
+                        ) : (
+                          bucket.orders.map(renderOrderCard)
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

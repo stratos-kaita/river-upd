@@ -22,20 +22,7 @@ import { INITIAL_MENU_ITEMS, INITIAL_TABLES, INITIAL_ORDERS, DEFAULT_SETTINGS } 
 import { sounds } from './utils/sound';
 
 export default function App() {
-  const [currentAccount, setCurrentAccount] = useState<UserAccount>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('river_active_account');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch {
-          // ignore
-        }
-      }
-    }
-    return DEFAULT_ACCOUNTS[0]; // Default to Waiter Account
-  });
-
+  const [currentAccount, setCurrentAccount] = useState<UserAccount | null>(null);
   const [currentScreen, setCurrentScreen] = useState<ActiveScreen>('tables');
   const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(INITIAL_MENU_ITEMS);
@@ -44,7 +31,7 @@ export default function App() {
   const [isMobileCartOpen, setIsMobileCartOpen] = useState<boolean>(false);
   const [cartCount, setCartCount] = useState<number>(0);
   const [selectedTableForOrder, setSelectedTableForOrder] = useState<string>('');
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(true);
   const [targetScreenAfterLogin, setTargetScreenAfterLogin] = useState<ActiveScreen | null>(null);
 
   // Initialize data and subscribe to real-time events
@@ -109,6 +96,11 @@ export default function App() {
 
   // Role-based Navigation
   const handleNavigate = (screen: ActiveScreen) => {
+    if (!currentAccount) {
+      setTargetScreenAfterLogin(screen);
+      setIsLoginModalOpen(true);
+      return;
+    }
     // If attempting to access Boss-only screens as Waiter, request Boss PIN authorization
     if (
       (screen === 'kds' || screen === 'settings' || screen === 'history') &&
@@ -123,9 +115,7 @@ export default function App() {
 
   const handleLogin = (account: UserAccount) => {
     setCurrentAccount(account);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('river_active_account', JSON.stringify(account));
-    }
+    setIsLoginModalOpen(false);
     if (account.role === 'boss' && targetScreenAfterLogin) {
       setCurrentScreen(targetScreenAfterLogin);
       setTargetScreenAfterLogin(null);
@@ -135,6 +125,13 @@ export default function App() {
     ) {
       setCurrentScreen('tables');
     }
+  };
+
+  const handleLogout = () => {
+    setCurrentAccount(null);
+    setTargetScreenAfterLogin(null);
+    setIsLoginModalOpen(true);
+    setCurrentScreen('tables');
   };
 
   // Order Operations
@@ -156,7 +153,9 @@ export default function App() {
       ...orderData,
       status: 'incoming',
       paymentStatus: orderData.paymentStatus || 'pending',
-      notes: orderData.customerName ? `Ordered by ${currentAccount.name} (${orderData.customerName})` : `Staff: ${currentAccount.name}`,
+      notes: orderData.customerName
+        ? `Ordered by ${currentAccount?.name || 'Staff'} (${orderData.customerName})`
+        : `Staff: ${currentAccount?.name || 'Staff'}`,
     });
     if (created) {
       setOrders((prev) => [created, ...prev.filter((o) => o.id !== created.id)]);
@@ -381,6 +380,7 @@ export default function App() {
         onToggleSound={handleToggleSound}
         onOpenMobileCart={() => setIsMobileCartOpen(true)}
         onOpenLogin={() => setIsLoginModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* Screen Views */}
@@ -393,7 +393,7 @@ export default function App() {
             shopName={settings.shopName}
             taxRate={settings.taxRate}
             isMonochrome={isMonochrome}
-            canRemoveItems={currentAccount.role === 'boss'}
+            canRemoveItems={currentAccount?.role === 'boss'}
             onSendOrder={handleSendOrder}
             onCartCountChange={setCartCount}
             isMobileCartOpen={isMobileCartOpen}
@@ -421,7 +421,7 @@ export default function App() {
         )}
 
         {/* Protected Boss Screens */}
-        {currentScreen === 'kds' && currentAccount.role === 'boss' && (
+        {currentScreen === 'kds' && currentAccount?.role === 'boss' && (
           <ServerKitchenScreen
             orders={orders}
             currency={settings.currency}
@@ -433,7 +433,7 @@ export default function App() {
           />
         )}
 
-        {currentScreen === 'history' && currentAccount.role === 'boss' && (
+        {currentScreen === 'history' && currentAccount?.role === 'boss' && (
           <OrderHistoryScreen
             orders={orders}
             currency={settings.currency}
@@ -442,7 +442,7 @@ export default function App() {
           />
         )}
 
-        {currentScreen === 'settings' && currentAccount.role === 'boss' && (
+        {currentScreen === 'settings' && currentAccount?.role === 'boss' && (
           <SettingsScreen
             settings={settings}
             menuItems={menuItems}
@@ -459,8 +459,10 @@ export default function App() {
         targetRole={targetScreenAfterLogin ? 'boss' : undefined}
         isOpen={isLoginModalOpen}
         onClose={() => {
-          setIsLoginModalOpen(false);
-          setTargetScreenAfterLogin(null);
+          if (currentAccount) {
+            setIsLoginModalOpen(false);
+            setTargetScreenAfterLogin(null);
+          }
         }}
         onLogin={handleLogin}
       />

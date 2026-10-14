@@ -8,10 +8,11 @@ interface NavbarProps {
   cartCount: number;
   openOrdersCount: number;
   settings: ShopSettings;
-  currentAccount: UserAccount;
+  currentAccount: UserAccount | null;
   onToggleSound: () => void;
   onOpenMobileCart?: () => void;
   onOpenLogin: () => void;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -24,8 +25,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSound,
   onOpenMobileCart,
   onOpenLogin,
+  onLogout,
 }) => {
-  const isBoss = currentAccount.role === 'boss';
+  const isBoss = currentAccount?.role === 'boss';
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between gap-3 md:gap-6 px-3 md:px-6 py-2.5 border-b bg-white border-neutral-200 text-neutral-900 transition-colors">
@@ -144,26 +146,51 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Zone 3: Role Switcher & Quick Utilities */}
       <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-        {/* Active Staff Account Switcher */}
-        <button
-          onClick={onOpenLogin}
-          title="Click to Switch Account (Waiter / Boss)"
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-bold transition-all ${
-            isBoss
-              ? 'bg-neutral-900 text-white border-neutral-900 shadow-2xs'
-              : 'bg-neutral-50 text-neutral-800 border-neutral-300 hover:border-neutral-500'
-          }`}
-        >
-          {isBoss ? (
-            <ShieldCheck size={14} className="text-amber-400" />
-          ) : (
-            <UserCheck size={14} className="text-neutral-700" />
-          )}
-          <span>{isBoss ? 'Boss' : 'Waiter'}</span>
-          <span className="text-[10px] opacity-75 font-normal hidden sm:inline">
-            (Switch)
-          </span>
-        </button>
+        {/* Active Staff Account Switcher & Lock Button */}
+        {currentAccount ? (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onOpenLogin}
+              title="Click to Switch Account (Waiter / Boss)"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-bold transition-all ${
+                isBoss
+                  ? 'bg-neutral-900 text-white border-neutral-900 shadow-2xs'
+                  : 'bg-neutral-50 text-neutral-800 border-neutral-300 hover:border-neutral-500'
+              }`}
+            >
+              {isBoss ? (
+                <ShieldCheck size={14} className="text-amber-400" />
+              ) : (
+                <UserCheck size={14} className="text-neutral-700" />
+              )}
+              <span>{isBoss ? 'Boss' : 'Waiter'}</span>
+              <span className="text-[10px] opacity-75 font-normal hidden sm:inline">
+                (Switch)
+              </span>
+            </button>
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                title="Lock POS Terminal / Log Out"
+                aria-label="Lock Terminal"
+                className="p-1.5 rounded border border-neutral-300 hover:border-neutral-500 hover:bg-neutral-100 text-neutral-600 transition-colors"
+              >
+                <Lock size={14} />
+              </button>
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpenLogin}
+            title="Log in with PIN code"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-neutral-900 text-white text-xs font-bold shadow-2xs hover:bg-neutral-800 transition-all"
+          >
+            <Lock size={14} />
+            <span>Log In</span>
+          </button>
+        )}
 
         {/* Sound Chime Toggle */}
         <button
